@@ -2,8 +2,7 @@
 
 void Main(string[] args)
 {
-	//var inputPath = @".\input.txt";
-	var inputPath = @"C:\Users\sergi\Desktop\advent_of_code\day_5\input.txt";
+	var inputPath = @".\input.txt";
 	if (args?.Length > 0 && File.Exists(args[0]))
 		inputPath = args[0];
 
