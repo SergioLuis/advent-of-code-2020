@@ -3,7 +3,7 @@
 void Main(string[] args)
 {
 	var inputPath = @".\input.txt";
-	if (args?.Length > 0 && File.Exists(args[1]))
+	if (args?.Length > 0 && File.Exists(args[0]))
 		inputPath = args[0];
 		
 	List<int> numbers = ReadLines(inputPath)
