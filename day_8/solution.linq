@@ -6,15 +6,16 @@ void Main(string[] args)
 	if (args?.Length > 0 && File.Exists(args[0]))
 		inputPath = args[0];
 		
-	var instructions = ReadLines(inputPath).ToList();
-	var handheldConsole = new HandheldConsole(instructions);
+	var program = ReadLines(inputPath).ToList();
+	var handheldConsole = new HandheldConsole(program);
 	
 	handheldConsole.RunUntilCompletion();
 	handheldConsole.GlobalAcc.Dump("Solution 1");
 	
-	GenerateProgramVariations(instructions)
+	GenerateProgramVariations(program)
 		.Select(program => new HandheldConsole(program))
-		.First(console => console.RunUntilCompletion())
+		.First(console =>
+			console.RunUntilCompletion() == HandheldConsole.HaltCause.CompletedOk)
 		.GlobalAcc
 		.Dump("Solution 2");
 }
@@ -27,53 +28,48 @@ IEnumerable<List<string>> GenerateProgramVariations(List<string> program)
 			continue;
 	
 		var result = new List<string>();
-		
-		for (int j = 0; j < i; j++)
-			result.Add(program[j]);
-			
-		result.Add(program[i].StartsWith("nop")
+
+		result.AddRange(program.Take(i));
+		result.Add(program[i].StartsWith("n")
 			? program[i].Replace("nop", "jmp")
 			: program[i].Replace("jmp", "nop"));
-		
-		for (int j = i + 1; j < program.Count; j++)
-			result.Add(program[j]);
+		result.AddRange(program
+			.Skip(i + 1)
+			.Take(program.Count));
 			
 		yield return result;
 	}
 }
 
-IEnumerable<string> ReadLines(string path)
-{
-	using FileStream fs = File.OpenRead(path);
-	using StreamReader sr = new StreamReader(fs);
-		
-	string line;
-	while ((line = sr.ReadLine()) != null)
-		yield return line;
-}
-
 class HandheldConsole
 {
-	public int ProgramCounter { get; private set; }
+	public enum HaltCause
+	{
+		CompletedOk,
+		ProgramCounterOutsideOfBounds,
+		LoopDetected
+	}
+
 	public int GlobalAcc { get; private set; }
 	
 	public HandheldConsole(List<string> program)
 	{
-		ProgramCounter = 0;
 		GlobalAcc = 0;
+		mProgramCounter = 0;
+
 		mProgram = program;
 		mVisitedInstructions = new HashSet<int>();
 	}
 	
-	public bool RunUntilCompletion()
+	public HaltCause RunUntilCompletion()
 	{
-		while (!mVisitedInstructions.Contains(ProgramCounter))
+		while (!mVisitedInstructions.Contains(mProgramCounter))
 		{
-			if (ProgramCounter < 0 || ProgramCounter >= mProgram.Count)
-				return false;
+			if (mProgramCounter < 0 || mProgramCounter >= mProgram.Count)
+				return HaltCause.ProgramCounterOutsideOfBounds;
 
-			mVisitedInstructions.Add(ProgramCounter);
-			string instruction = mProgram[ProgramCounter];
+			mVisitedInstructions.Add(mProgramCounter);
+			string instruction = mProgram[mProgramCounter];
 			
 			string opCode = instruction.Substring(0, 3);
 			string opArgs = instruction.Substring(4);
@@ -96,27 +92,33 @@ class HandheldConsole
 					break;
 			}
 			
-			ProgramCounter += nextPcIncrement;
-			
-			// ProgramCounter set to next instruction in init code
-			// Valid run
-			if (ProgramCounter == mProgram.Count)
-				return true;
+			mProgramCounter += nextPcIncrement;
+
+			if (mProgramCounter == mProgram.Count)
+				return HaltCause.CompletedOk;
 		}
 		
-		// Loop detected
-		// Invalid run
-		return false;
+		return HaltCause.LoopDetected;
 	}
 	
 	int ParseVal(string value)
 	{
 		int n = int.Parse(value.Substring(1));
-		return (value[0] == '-')
-			? n * -1
-			: n;
+		return (value[0] == '-') ? n * -1 : n;
 	}
+	
+	int mProgramCounter;
 	
 	readonly List<string> mProgram;
 	readonly HashSet<int> mVisitedInstructions;
+}
+
+IEnumerable<string> ReadLines(string path)
+{
+	using FileStream fs = File.OpenRead(path);
+	using StreamReader sr = new StreamReader(fs);
+		
+	string line;
+	while ((line = sr.ReadLine()) != null)
+		yield return line;
 }
