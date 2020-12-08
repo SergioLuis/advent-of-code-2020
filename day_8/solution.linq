@@ -5,10 +5,12 @@ void Main(string[] args)
 	var inputPath = @".\input.txt";
 	if (args?.Length > 0 && File.Exists(args[0]))
 		inputPath = args[0];
-		
-	var program = ReadLines(inputPath).ToList();
-	var handheldConsole = new HandheldConsole(program);
-	
+
+	var program = ReadLines(inputPath)
+		.Select(HandheldConsole.Instruction.Parse)
+		.ToList();
+
+	var handheldConsole = new HandheldConsole(program);	
 	handheldConsole.RunUntilCompletion();
 	handheldConsole.GlobalAcc.Dump("Solution 1");
 	
@@ -20,19 +22,25 @@ void Main(string[] args)
 		.Dump("Solution 2");
 }
 
-IEnumerable<List<string>> GenerateProgramVariations(List<string> program)
+IEnumerable<List<HandheldConsole.Instruction>> GenerateProgramVariations(
+	List<HandheldConsole.Instruction> program)
 {
+	Func<HandheldConsole.Instruction, HandheldConsole.Instruction> swapInstruction =
+		(instruction) => new HandheldConsole.Instruction(
+			instruction.OpCode == HandheldConsole.Instruction.OpCodes.Nop
+				? HandheldConsole.Instruction.OpCodes.Jmp
+				: HandheldConsole.Instruction.OpCodes.Nop,
+			instruction.OpValue);
+
 	for (int i = 0; i < program.Count; i++)
 	{
-		if (program[i].StartsWith("acc"))
+		if (program[i].OpCode == HandheldConsole.Instruction.OpCodes.Acc)
 			continue;
 	
-		var result = new List<string>();
+		var result = new List<HandheldConsole.Instruction>();
 
 		result.AddRange(program.Take(i));
-		result.Add(program[i].StartsWith("n")
-			? program[i].Replace("nop", "jmp")
-			: program[i].Replace("jmp", "nop"));
+		result.Add(swapInstruction(program[i]));
 		result.AddRange(program
 			.Skip(i + 1)
 			.Take(program.Count));
@@ -43,6 +51,39 @@ IEnumerable<List<string>> GenerateProgramVariations(List<string> program)
 
 class HandheldConsole
 {
+	public struct Instruction
+	{
+		public enum OpCodes
+		{
+			Nop,
+			Acc,
+			Jmp,
+			Invalid
+		}
+		
+		public readonly OpCodes OpCode;
+		public readonly int OpValue;
+		
+		public Instruction(OpCodes opCode, int opValue)
+		{
+			OpCode = opCode;
+			OpValue = opValue;
+		}
+		
+		public static Instruction Parse(string s)
+		{
+			string[] parts = s.Split(' ');
+			OpCodes opCode = parts[0] switch {
+				"nop" => OpCodes.Nop,
+				"acc" => OpCodes.Acc,
+				"jmp" => OpCodes.Jmp,
+				_ => OpCodes.Invalid
+			};
+			
+			return new Instruction(opCode, int.Parse(parts[1]));
+		}
+	}
+	
 	public enum HaltCause
 	{
 		CompletedOk,
@@ -50,13 +91,12 @@ class HandheldConsole
 		LoopDetected
 	}
 
-	public int GlobalAcc { get; private set; }
+	public int GlobalAcc;
 	
-	public HandheldConsole(List<string> program)
+	public HandheldConsole(List<Instruction> program)
 	{
 		GlobalAcc = 0;
 		mProgramCounter = 0;
-
 		mProgram = program;
 		mVisitedInstructions = new HashSet<int>();
 	}
@@ -69,23 +109,20 @@ class HandheldConsole
 				return HaltCause.ProgramCounterOutsideOfBounds;
 
 			mVisitedInstructions.Add(mProgramCounter);
-			string instruction = mProgram[mProgramCounter];
-			
-			string opCode = instruction.Substring(0, 3);
-			string opArgs = instruction.Substring(4);
+			Instruction instruction = mProgram[mProgramCounter];
 
 			int nextPcIncrement = 1;
-			switch (opCode)
+			switch (instruction.OpCode)
 			{
-				case "nop":
+				case Instruction.OpCodes.Nop:
 					break;
 					
-				case "acc":
-					GlobalAcc += ParseVal(opArgs);
+				case Instruction.OpCodes.Acc:
+					GlobalAcc += instruction.OpValue;
 					break;
 					
-				case "jmp":
-					nextPcIncrement = ParseVal(opArgs);
+				case Instruction.OpCodes.Jmp:
+					nextPcIncrement = instruction.OpValue;
 					break;
 					
 				default:
@@ -100,16 +137,10 @@ class HandheldConsole
 		
 		return HaltCause.LoopDetected;
 	}
-	
-	int ParseVal(string value)
-	{
-		int n = int.Parse(value.Substring(1));
-		return (value[0] == '-') ? n * -1 : n;
-	}
-	
+
 	int mProgramCounter;
 	
-	readonly List<string> mProgram;
+	readonly List<Instruction> mProgram;
 	readonly HashSet<int> mVisitedInstructions;
 }
 
